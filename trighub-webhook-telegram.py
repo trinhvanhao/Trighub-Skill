@@ -42,39 +42,70 @@ def send_telegram(data):
         # Extract data
         amount = data.get('amount', 0)
         content = data.get('content', '')
-        bank = data.get('bankName', 'Unknown')
-        transaction_type = data.get('transactionType', 'OUT')
-        transaction_id = data.get('transaction_id', 'N/A')
+        bank = data.get('bankName', '').strip()
+        receiver_name = (data.get('receiverName', '') or '').strip()
         
-        # Determine if IN or OUT
-        is_inflow = transaction_type.upper() == 'IN' or 'NHAN' in content.upper()
+        # Logic phân biệt 4 loại giao dịch:
+        # 1. bankName = "VPBank" + content có "NHAN TU" → 💚 NHẬN VPBank
+        # 2. bankName = "" + receiverName = "" → 💚 NHẬN NH khác
+        # 3. bankName = "VPBank" + content KHÔNG có "NHAN TU" → ❤️ CHUYỂN VPBank
+        # 4. bankName có giá trị khác (Techcombank, ACB...) → ❤️ CHUYỂN NH khác
         
-        # Format message based on transaction type
-        if is_inflow:
-            # NHẬN (Inflow)
-            message = f"""<b>💚 NHẬN</b>
+        content_upper = content.upper()
+        is_vpbank = (bank.upper() == 'VPBANK')
+        has_nhan_tu = ('NHAN TU' in content_upper)
+        bank_empty = (bank == '')
+        receiver_empty = (receiver_name == '')
+        
+        if is_vpbank and has_nhan_tu:
+            # 💚 NHẬN VPBank
+            message = f"""<b>💚 NHẬN TIỀN</b>
 
-<b>Ngân hàng:</b> {bank}
-<b>Số tiền:</b> <code>{amount:,.0f} VND</code>
-<b>Mã giao dịch:</b> <code>{transaction_id}</code>
+<b>Ngân hàng:</b> VPBank
+<b>Số tiền:</b> <code>+{amount:,.0f} VND</code>
 <b>Nội dung:</b> <i>{content}</i>
 
 <b>⏰ Thời gian:</b> {datetime.now().strftime('%H:%M:%S - %d/%m/%Y')}"""
-        else:
-            # CHUYỂN (Outflow)
-            # Extract recipient name from content if possible
-            recipient = data.get('recipient_name', 'Unknown')
-            if not recipient or recipient == 'Unknown':
-                # Try to extract from content
-                words = content.split()
-                recipient = words[0] if words else 'Unknown'
-            
-            message = f"""<b>❤️ CHUYỂN</b>
+        
+        elif bank_empty and receiver_empty:
+            # 💚 NHẬN NH khác
+            message = f"""<b>💚 NHẬN TIỀN</b>
 
-<b>Ngân hàng:</b> {bank}
-<b>Số tiền:</b> <code>{amount:,.0f} VND</code>
-<b>Tên người nhận:</b> {recipient}
-<b>Mã giao dịch:</b> <code>{transaction_id}</code>
+<b>Ngân hàng:</b> Ngân hàng khác
+<b>Số tiền:</b> <code>+{amount:,.0f} VND</code>
+<b>Nội dung:</b> <i>{content}</i>
+
+<b>⏰ Thời gian:</b> {datetime.now().strftime('%H:%M:%S - %d/%m/%Y')}"""
+        
+        elif is_vpbank and not has_nhan_tu:
+            # ❤️ CHUYỂN VPBank
+            message = f"""<b>❤️ CHUYỂN TIỀN</b>
+
+<b>Ngân hàng:</b> VPBank
+<b>Số tiền:</b> <code>-{amount:,.0f} VND</code>
+<b>Nội dung:</b> <i>{content}</i>
+
+<b>⏰ Thời gian:</b> {datetime.now().strftime('%H:%M:%S - %d/%m/%Y')}"""
+        
+        else:
+            # ❤️ CHUYỂN NH khác (bankName = Techcombank, ACB...)
+            bank_display = bank if bank else 'Ngân hàng khác'
+            receiver_display = receiver_name if receiver_name else ''
+            
+            if receiver_display:
+                message = f"""<b>❤️ CHUYỂN TIỀN</b>
+
+<b>Người nhận:</b> {receiver_display}
+<b>Ngân hàng:</b> {bank_display}
+<b>Số tiền:</b> <code>-{amount:,.0f} VND</code>
+<b>Nội dung:</b> <i>{content}</i>
+
+<b>⏰ Thời gian:</b> {datetime.now().strftime('%H:%M:%S - %d/%m/%Y')}"""
+            else:
+                message = f"""<b>❤️ CHUYỂN TIỀN</b>
+
+<b>Ngân hàng:</b> {bank_display}
+<b>Số tiền:</b> <code>-{amount:,.0f} VND</code>
 <b>Nội dung:</b> <i>{content}</i>
 
 <b>⏰ Thời gian:</b> {datetime.now().strftime('%H:%M:%S - %d/%m/%Y')}"""
